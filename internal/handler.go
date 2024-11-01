@@ -1,25 +1,26 @@
-package person
+package internal
 
 import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type Person struct {
-	name string
-	age int
-	height float32
+	Name string
+	Age int
+	Height float32
 }
 
 type PersonHandler struct{}
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request) 
 
-
 func NewPersonHandler() *PersonHandler {
 	return &PersonHandler{}
 }
+
 func (h *PersonHandler) HandleAddPerson()(string, handlerFunc){
 	return "POST /person" , func(w http.ResponseWriter, r *http.Request) {
 		var person Person
@@ -30,6 +31,7 @@ func (h *PersonHandler) HandleAddPerson()(string, handlerFunc){
 		slog.Info("create person", "person", person)
 	}
 }
+
 func handleAddPepole(people []Person){}
 func handleGetPeople(){}
 func handleGetPersonById(id int){}
