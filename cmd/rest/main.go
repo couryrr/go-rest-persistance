@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
@@ -11,18 +12,37 @@ import (
 	"time"
 
 	"github.com/couryrr/go-rest-persistance/internal"
+	_ "github.com/mattn/go-sqlite3"
 )
+
+var handler *internal.UserHandler
+
+func init() {
+    db, err := sql.Open("sqlite3", "users.db")
+
+    if err != nil {
+        log.Fatal("database failed to open")
+    }
+    
+	repo := internal.NewSQLiteRepository(db)
+	err = repo.Migrate()
+	if err != nil {
+		log.Fatal("unable to run database migration: ", err)
+	}
+    handler = internal.NewUserHandler(repo)
+    
+    if err != nil {
+        log.Fatalf("article_handler failed to create: %s", err) 
+    }
+}
 
 func main(){
 	router := http.NewServeMux()
-
-	personHandler := internal.NewPersonHandler()
-	path, fn := personHandler.HandleAddPerson()
-	router.HandleFunc(path, fn)
+	router.Handle("/users/", http.StripPrefix("/users", handler.GetHandler()))
 
 	server := &http.Server{
 		Addr: ":8080",
-		Handler: router,
+		Handler: http.TimeoutHandler(router, 1*time.Second, "Timed out!\n"),
 	}
 
 	go func(){
@@ -49,8 +69,6 @@ func main(){
 
 	if err != nil {
 		log.Fatalf("HTTP server error: %v", err)
-	} else {
-		log.Println("if I am here shutdown has returned correct?")
 	}
 
 	log.Println("gracefully shutdown complete...")
