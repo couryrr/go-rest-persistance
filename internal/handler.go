@@ -21,8 +21,6 @@ type UserHandler struct{
 	repo Repo
 }
 
-type handlerFunc func(w http.ResponseWriter, r *http.Request) 
-
 type Repo interface {
     Migrate() error
     Create(user *User) (int, error)
@@ -119,12 +117,12 @@ func NewUserHandler(repo Repo) *UserHandler {
 func (h *UserHandler) GetHandler()(http.Handler){
 	mux := http.NewServeMux()
 	mux.HandleFunc(h.HandleAddUser())
-	mux.HandleFunc(h.HandleGetUserById())
+	mux.Handle(h.HandleGetUserById())
 	mux.HandleFunc(h.HandleUpdateUser())
 	return mux
 }
 
-func (h *UserHandler) HandleAddUser()(string, handlerFunc){
+func (h *UserHandler) HandleAddUser()(string, http.HandlerFunc){
 	return "POST /" , func(w http.ResponseWriter, r *http.Request) {
 		var user User
 		err := json.NewDecoder(r.Body).Decode(&user)
@@ -139,8 +137,8 @@ func (h *UserHandler) HandleAddUser()(string, handlerFunc){
 	}
 }
 
-func (h *UserHandler) HandleGetUserById()(string, handlerFunc){
-	return "GET /{id}", func(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) HandleGetUserById()(string, http.Handler){
+	return "GET /{id}", Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pv_id := r.PathValue("id")
 		ctx := r.Context()
 		if pv_id == ""{
@@ -153,26 +151,30 @@ func (h *UserHandler) HandleGetUserById()(string, handlerFunc){
 			http.Error(w, "bad id value sent", http.StatusBadRequest)
 		}
 		
+		c := make(chan bool, 1)		
 		go func(){
-			time.Sleep(3*time.Second)
 			user, err := h.repo.Read(id)
 			if err != nil {
 				if !errors.Is(err, sql.ErrNoRows){
 					slog.Error("error finding user", "err", err)
 				}
 				http.NotFound(w, r)
+				c <- true
 				return
 			}
 			json.NewEncoder(w).Encode(user)
+			c <- true
 		}()
 		select{
+		case <-c:
+			slog.Info("Done")
 		case <-ctx.Done():
 			slog.Error("Timeout occred")
 		}
-	}	
+	}))
 }
 
-func (h *UserHandler) HandleUpdateUser()(string, handlerFunc){
+func (h *UserHandler) HandleUpdateUser()(string, http.HandlerFunc){
 	return "PATCH /update", func(w http.ResponseWriter, r *http.Request) {
 		var user User
 		err := json.NewDecoder(r.Body).Decode(&user)
